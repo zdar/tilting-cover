@@ -1,0 +1,7 @@
+{
+  "name": "Tilting Cover",
+  "hacs": "1.6.0",
+  "domains": ["cover"],
+  "iot_class": "Local Push",
+  "homeassistant": "2023.3.0"
+}
