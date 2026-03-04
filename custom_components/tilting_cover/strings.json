@@ -1,0 +1,44 @@
+{
+  "state": {
+    "cover": {
+      "tilting_cover": {
+        "state_attributes": {
+          "estimated_position": {
+            "name": "Estimated Position"
+          },
+          "estimated_tilt": {
+            "name": "Estimated Tilt"
+          },
+          "original_cover_entity_id": {
+            "name": "Original Cover Entity"
+          },
+          "stored_tilt_position": {
+            "name": "Stored Tilt Position"
+          },
+          "stored_cover_position": {
+            "name": "Stored Cover Position"
+          },
+          "last_known_position": {
+            "name": "Last Known Position"
+          },
+          "position_timestamp": {
+            "name": "Position Timestamp"
+          },
+          "position_data_age": {
+            "name": "Position Data Age"
+          },
+          "storage_healthy": {
+            "name": "Storage Healthy"
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "cover": {
+      "tilting_cover": {
+        "name": "Tilting Cover"
+      }
+    }
+  }
+}
