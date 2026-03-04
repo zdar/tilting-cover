@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Tilting Cover Setup",
+        "description": "Konfigurieren Sie Ihre Tilting Cover Integration",
+        "data": {
+          "name": "Name",
+          "cover_entity_id": "Cover-Entität",
+          "travel_time": "Fahrzeit (Sekunden)",
+          "slat_rotation_time": "Lamellenrotationszeit (Sekunden)"
+        },
+        "data_description": {
+          "name": "Anzeigename für die erweiterte Cover-Entität",
+          "cover_entity_id": "Wählen Sie die vorhandene Cover-Entität zur Erweiterung mit Neigungsfunktionalität",
+          "travel_time": "Zeit für vollständige 0%↔100% Positionsänderung",
+          "slat_rotation_time": "Zeit für Lamellenrotation während der Bewegung"
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Ausgewählte Entität existiert nicht oder ist nicht verfügbar.",
+      "not_cover_entity": "Ausgewählte Entität ist keine Cover-Entität.",
+      "already_has_tilt": "Der ausgewählte Cover hat bereits eingebaute Neigungsfunktionalität.",
+      "already_configured": "Der ausgewählte Cover ist bereits mit Tilting Cover konfiguriert.",
+      "unknown": "Unerwarteter Fehler ist aufgetreten."
+    },
+    "abort": {
+      "already_configured": "Diese Cover-Entität ist bereits mit Tilting Cover konfiguriert.",
+      "no_covers_available": "Keine geeigneten Cover-Entitäten gefunden. Alle Cover haben bereits Neigungsfunktionalität oder sind bereits konfiguriert.",
+      "unknown": "Während der Einrichtung ist ein unerwarteter Fehler aufgetreten."
+    }
+  },
+  "entity": {
+    "name_prefix": "Neigungsf."
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Tilting Cover Optionen aktualisieren",
+        "description": "Aktualisieren Sie die Konfiguration Ihrer Tilting Cover",
+        "data": {
+          "travel_time": "Fahrzeit (Sekunden)",
+          "slat_rotation_time": "Lamellenrotationszeit (Sekunden)"
+        }
+      }
+    }
+  },
+  "system_health": {
+    "info": {
+      "entities_with_storage": "Entitäten mit persistentem Speicher",
+      "storage_healthy": "Speichersystem gesund",
+      "stored_data": "Gespeicherte Daten verfügbar",
+      "storage_size": "Speichergröße",
+      "last_tilt_position": "Letzte Neigungsposition",
+      "last_cover_position": "Letzte Jalousieposition",
+      "last_timestamp": "Position-Zeitstempel",
+      "position_data_age": "Alter der Positionsdaten"
+    }
+  }
+}

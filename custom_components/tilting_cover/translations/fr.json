@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuration Tilting Cover",
+        "description": "Configurez votre intégration de store inclinable",
+        "data": {
+          "name": "Nom",
+          "cover_entity_id": "Entité de store",
+          "travel_time": "Temps de parcours (secondes)",
+          "slat_rotation_time": "Temps de rotation des lames (secondes)"
+        },
+        "data_description": {
+          "name": "Nom convivial pour l'entité de store améliorée",
+          "cover_entity_id": "Sélectionnez l'entité de store existante à améliorer avec la fonctionnalité d'inclinaison",
+          "travel_time": "Temps requis pour un changement de position complet 0%↔100%",
+          "slat_rotation_time": "Temps pour la rotation des lames pendant le mouvement"
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "L'entité sélectionnée n'existe pas ou n'est pas disponible.",
+      "not_cover_entity": "L'entité sélectionnée n'est pas une entité de store.",
+      "already_has_tilt": "Le store sélectionné a déjà une fonctionnalité d'inclinaison intégrée.",
+      "already_configured": "Le store sélectionné est déjà configuré avec Tilting Cover.",
+      "unknown": "Une erreur inattendue s'est produite."
+    },
+    "abort": {
+      "already_configured": "Cette entité de store est déjà configurée avec Tilting Cover.",
+      "no_covers_available": "Aucune entité de store appropriée trouvée. Tous les stores ont déjà une fonctionnalité d'inclinaison ou sont déjà configurés.",
+      "unknown": "Une erreur inattendue s'est produite lors de la configuration."
+    }
+  },  "entity": {
+    "name_prefix": "Inclinaison"
+  },  "options": {
+    "step": {
+      "init": {
+        "title": "Mettre à jour les options Tilting Cover",
+        "description": "Mettez à jour la configuration de votre store inclinable",
+        "data": {
+          "travel_time": "Temps de parcours (secondes)",
+          "slat_rotation_time": "Temps de rotation des lames (secondes)"
+        }
+      }
+    }
+  },
+  "system_health": {
+    "info": {
+      "entities_with_storage": "Entités avec stockage persistant",
+      "storage_healthy": "Système de stockage sain",
+      "stored_data": "Données stockées disponibles",
+      "storage_size": "Taille du stockage",
+      "last_tilt_position": "Dernière position d'inclinaison",
+      "last_cover_position": "Dernière position du volet",
+      "last_timestamp": "Horodatage de position",
+      "position_data_age": "Âge des données de position"
+    }
+  }
+}

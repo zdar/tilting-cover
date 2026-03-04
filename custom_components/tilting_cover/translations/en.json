@@ -1,0 +1,66 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Select Cover Entity",
+        "description": "Select the underlying cover entity to add tilting functionality.",
+        "data": {
+          "cover_entity_id": "Cover Entity"
+        }
+      },
+      "config": {
+        "title": "Configure Tilting Cover",
+        "description": "Configure the timing and naming for your tilting cover.",
+        "data": {
+          "name": "Name",
+          "travel_time": "Travel Time (seconds)",
+          "slat_rotation_time": "Slat Rotation Time (seconds)"
+        },
+        "data_description": {
+          "name": "Friendly name for the enhanced cover entity",
+          "travel_time": "Time required for full 0%↔100% position change",
+          "slat_rotation_time": "Time for slat rotation during movement"
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Selected entity does not exist or is not available.",
+      "not_cover_entity": "Selected entity is not a cover entity.",
+      "already_has_tilt": "Selected cover already has built-in tilt functionality.",
+      "already_configured": "Selected cover is already configured with Tilting Cover.",
+      "unknown": "Unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This cover entity is already configured with Tilting Cover.",
+      "no_covers_available": "No suitable cover entities found. All covers either already have tilt functionality or are already configured.",
+      "unknown": "An unexpected error occurred during setup."
+    }
+  },
+  "entity": {
+    "name_prefix": "Tilting"
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Update Tilting Cover Options",
+        "description": "Update the configuration for your tilting cover",
+        "data": {
+          "travel_time": "Travel Time (seconds)",
+          "slat_rotation_time": "Slat Rotation Time (seconds)"
+        }
+      }
+    }
+  },
+  "system_health": {
+    "info": {
+      "entities_with_storage": "Entities with persistent storage",
+      "storage_healthy": "Storage system healthy",
+      "stored_data": "Stored data available",
+      "storage_size": "Storage size",
+      "last_tilt_position": "Last tilt position",
+      "last_cover_position": "Last cover position",
+      "last_timestamp": "Last position timestamp",
+      "position_data_age": "Position data age"
+    }
+  }
+}

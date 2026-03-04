@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nastavení Tilting Cover",
+        "description": "Nakonfigurujte integraci pro nakláněcí rolety",
+        "data": {
+          "name": "Název",
+          "cover_entity_id": "Entita rolety",
+          "travel_time": "Doba otevření/zavření včetně natočení lamel (sekundy)",
+          "slat_rotation_time": "Doba rotace lamel (sekundy)"
+        },
+        "data_description": {
+          "name": "Přátelský název pro rozšířenou entitu rolety",
+          "cover_entity_id": "Vyberte existující entitu rolety pro rozšíření o funkce nakláněni",
+          "travel_time": "Doba potřebná pro kompletní změnu pozice 0%↔100%",
+          "slat_rotation_time": "Doba pro rotaci lamel během pohybu"
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Vybraná entita neexistuje nebo není dostupná.",
+      "not_cover_entity": "Vybraná entita není entita rolety.",
+      "already_has_tilt": "Vybraná roleta již má vestavěnou funkci nakláněni.",
+      "already_configured": "Vybraná roleta je již nakonfigurována s Tilting Cover.",
+      "unknown": "Došlo k neočekávané chybě."
+    },
+    "abort": {
+      "already_configured": "Tato entita rolety je již nakonfigurována s Tilting Cover.",
+      "no_covers_available": "Žádné vhodné entity rolet nebyly nalezeny. Všechny rolety již mají funkčnost naklánění nebo jsou již nakonfigurovány.",
+      "unknown": "Během nastavení došlo k neočekávané chybě."
+    }
+  },
+  "entity": {
+    "name_prefix": "Naklápěcí"
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Aktualizace možností Tilting Cover",
+        "description": "Aktualizujte konfiguraci važí tilting cover",
+        "data": {
+          "travel_time": "Doba jízdy (sekundy)",
+          "slat_rotation_time": "Doba rotace lamel (sekundy)"
+        }
+      }
+    }
+  },
+  "system_health": {
+    "info": {
+      "entities_with_storage": "Entity s perzistentním úložištěm",
+      "storage_healthy": "Systém úložiště funguje",
+      "stored_data": "Uložená data jsou k dispozici",
+      "storage_size": "Velikost úložiště",
+      "last_tilt_position": "Poslední pozice natočení",
+      "last_cover_position": "Poslední pozice žaluzií",
+      "last_timestamp": "Časová značka pozice",
+      "position_data_age": "Stáří dat pozice"
+    }
+  }
+}
