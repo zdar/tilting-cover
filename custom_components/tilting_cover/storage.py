@@ -131,6 +131,15 @@ class TiltingCoverStorage:
         }
         await self.async_update_batch(updates)
 
+    async def async_update_batch(self, updates: dict[str, Any]) -> None:
+        """Update multiple data fields in a single operation and save."""
+        if not self._loaded:
+            _LOGGER.warning("Attempting to update before loading for %s", self._entity_id)
+            return
+            
+        self._data.update(updates)
+        await self.async_save()
+
     def get_position_tilt_pair(self) -> tuple[int, int, datetime | None]:
         """Get the stored position/tilt pair with timestamp."""
         cover_pos = self.get_cover_position()
@@ -155,18 +164,24 @@ class TiltingCoverStorage:
         self._data[STORAGE_ENTITY_STATE] = state_data
         await self.async_save()
 
-    async def async_update_batch(self, updates: dict[str, Any]) -> None:
-        """Update multiple values at once and save."""
-        self._data.update(updates)
-        await self.async_save()
+    async def async_update_entity_state(self, updates: dict[str, Any]) -> None:
+        """Update entity state data with partial updates."""
+        current_state = self.get_entity_state()
+        current_state.update(updates)
+        await self.async_set_entity_state(current_state)
+
+    def has_data(self) -> bool:
+        """Check if storage has any data."""
+        return bool(self._data and self._loaded)
+
+    def is_loaded(self) -> bool:
+        """Check if storage has been loaded."""
+        return self._loaded
 
     async def async_clear(self) -> None:
-        """Clear all stored data for this entity."""
-        try:
-            existing_data = await self._store.async_load() or {}
-            existing_data.pop(self._entity_id, None)
-            await self._store.async_save(existing_data)
-            self._data = {}
-            _LOGGER.debug("Cleared storage data for %s", self._entity_id)
-        except Exception as err:
-            _LOGGER.error("Error clearing storage data for %s: %s", self._entity_id, err)
+        """Clear all stored data."""
+        if not self._loaded:
+            return
+            
+        self._data.clear()
+        await self.async_save()
