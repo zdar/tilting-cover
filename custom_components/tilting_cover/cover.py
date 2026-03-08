@@ -278,15 +278,19 @@ class TiltingCover(CoverEntity, RestoreEntity):
             _LOGGER.warning("%s: Failed to apply inherited metadata: %s", self.entity_id, err)
             # Don't raise - this is not critical for functionality
 
-    @callback
-    async def _handle_underlying_state_change(self, event) -> None:
+    def _handle_underlying_state_change(self, event) -> None:
         """Handle underlying cover state change."""
         new_state = event.data.get("new_state")
         old_state = event.data.get("old_state")
         
         if not new_state:
             return
-            
+        
+        # Schedule async processing
+        self.hass.async_create_task(self._async_handle_underlying_state_change(new_state, old_state))
+    
+    async def _async_handle_underlying_state_change(self, new_state, old_state) -> None:
+        """Async handler for underlying cover state change."""
         # Update underlying cover state and position
         self._underlying_cover_state = new_state.state
         position_attr = new_state.attributes.get(ATTR_POSITION)
@@ -301,14 +305,16 @@ class TiltingCover(CoverEntity, RestoreEntity):
                 elif new_state.state in [STATE_OPEN, STATE_CLOSED]:
                     await self._handle_movement_stop_detected(new_state.state)
             elif old_underlying_position != self._underlying_cover_position:
-                # Position changed during movement - update using core algorithm
-                if self._current_command and self._command_in_progress:
-                    position_result = await self._calculate_position_from_underlying_change(
-                        self._underlying_cover_position
-                    )
-                    if position_result:
-                        self._current_cover_position = position_result["position"]
-                        self._current_tilt_position = position_result["tilt"]
+                # CRITICAL: Always calculate positions during underlying movement for real-time reporting
+                position_result = await self._calculate_position_from_underlying_change(
+                    self._underlying_cover_position
+                )
+                if position_result:
+                    self._current_cover_position = position_result["position"]
+                    self._current_tilt_position = position_result["tilt"]
+                    _LOGGER.debug("%s: Real-time position update - pos=%s%%, tilt=%s%% (underlying=%s%%)",
+                                  self.entity_id, self._current_cover_position, 
+                                  self._current_tilt_position, self._underlying_cover_position)
                 
                 # CRITICAL: Sync with definitive positions (0% or 100%) regardless of state
                 await self._sync_definitive_positions(self._underlying_cover_position)
@@ -318,9 +324,7 @@ class TiltingCover(CoverEntity, RestoreEntity):
     # Independent Position Tracking System - Core algorithm
     async def _calculate_position_from_underlying_change(self, new_underlying_position: int) -> dict | None:
         """Calculate position and tilt from underlying entity change using core algorithm."""
-        if not self._current_command or not self._command_in_progress:
-            return None
-            
+        
         # Get stored baseline positions for calculation
         baseline_position = self._last_stored_position or 0
         baseline_tilt = self._last_stored_tilt or 0
@@ -332,9 +336,23 @@ class TiltingCover(CoverEntity, RestoreEntity):
         if underlying_diff == 0:
             return {"position": baseline_position, "tilt": baseline_tilt}
         
-        # Get command targets and determine required changes
-        target_position = self._current_command.get("target_position", baseline_position)
-        target_tilt = self._current_command.get("target_tilt", baseline_tilt)
+        # Determine movement direction and targets
+        direction = "opening" if new_underlying_position > baseline_underlying else "closing"
+        
+        # Get command targets if command is active, otherwise use natural targets
+        if self._current_command and self._command_in_progress:
+            target_position = self._current_command.get("target_position", baseline_position)
+            target_tilt = self._current_command.get("target_tilt", baseline_tilt)
+        else:
+            # NO ACTIVE COMMAND: Calculate natural movement based on direction
+            if direction == "opening":
+                # Natural opening: move toward 100% position and tilt
+                target_position = 100
+                target_tilt = 100
+            else:
+                # Natural closing: move toward 0% position and tilt  
+                target_position = 0
+                target_tilt = 0
         
         position_diff = abs(target_position - baseline_position)
         tilt_diff = abs(target_tilt - baseline_tilt)
@@ -490,16 +508,36 @@ class TiltingCover(CoverEntity, RestoreEntity):
         # CORRECT ratio: how much tilt per underlying movement
         underlying_to_tilt_ratio = total_time / tilt_time if tilt_time > 0 else 1.0
         
-        # Calculate minimal underlying movement needed for tilt adjustment
-        underlying_needed = abs(tilt_diff) / underlying_to_tilt_ratio
+        # CRITICAL FIX: Use minimal pulse-like movement for tilt adjustment
+        # Instead of large absolute position changes, use small relative adjustments
+        min_underlying_pulse = 2.0  # Minimum 2% underlying movement
+        underlying_needed = max(abs(tilt_diff) / underlying_to_tilt_ratio, min_underlying_pulse)
         
-        # Calculate target underlying position for minimal tilt adjustment
-        if tilt_diff > 0:  # Need more tilt
-            target_underlying = baseline_underlying + underlying_needed
-        else:  # Need less tilt
-            target_underlying = baseline_underlying - underlying_needed
+        # FIXED DIRECTION LOGIC: Consider cover physics
+        # During Stage 2, we want tilt adjustment without major cover movement
+        # Use small pulse in direction that matches tilt need BUT avoid large cover displacement
+        current_underlying = self._underlying_cover_position or baseline_underlying
         
-        target_underlying = max(0, min(100, target_underlying))
+        if tilt_diff > 0:  # Need more tilt (open slats more)
+            # Small pulse toward higher underlying for tilt opening
+            target_underlying = current_underlying + underlying_needed
+        else:  # Need less tilt (close slats more)  
+            # Small pulse toward lower underlying for tilt closing
+            target_underlying = current_underlying - underlying_needed
+        
+        # Limit to reasonable range to avoid excessive cover movement
+        target_underlying = max(5, min(95, target_underlying))
+        
+        # Additional safety: If target would cause major cover position change, reduce it
+        position_impact = abs(target_underlying - current_underlying) * (1.0 / underlying_to_tilt_ratio)
+        if position_impact > 5:  # More than 5% cover movement
+            _LOGGER.warning("%s: Stage 2 would cause %s%% cover movement, reducing pulse",
+                           self.entity_id, position_impact)
+            underlying_needed = min(underlying_needed, 3.0)  # Limit to 3% max
+            if tilt_diff > 0:
+                target_underlying = current_underlying + underlying_needed
+            else:
+                target_underlying = current_underlying - underlying_needed
         
         # Command underlying entity (position tracking will calculate results)
         self._command_in_progress = True
@@ -525,8 +563,9 @@ class TiltingCover(CoverEntity, RestoreEntity):
         self._current_command = None
         self._command_in_progress = False
         
-        _LOGGER.debug("%s: Stage 2 command completed - tilt_diff=%s%%, underlying_needed=%s%%, final_underlying=%s%%",
-                      self.entity_id, tilt_diff, underlying_needed, self._underlying_cover_position)
+        _LOGGER.info("%s: Stage 2 completed - tilt_diff=%s%%, pulse=%s%%, final_underlying=%s%%, final_tilt=%s%%",
+                     self.entity_id, tilt_diff, underlying_needed, 
+                     self._underlying_cover_position, self._current_tilt_position)
 
     # Movement Detection System - External movement handling
     async def _handle_movement_start_detected(self, new_state: str) -> None:
