@@ -444,6 +444,11 @@ class TiltingCover(CoverEntity, RestoreEntity):
                 self._current_cover_position = position_result["position"]
                 self._current_tilt_position = position_result["tilt"]
         
+        # CRITICAL: Update baseline positions for Stage 2
+        self._last_stored_position = self._current_cover_position
+        self._last_stored_tilt = self._current_tilt_position
+        self._last_stored_underlying_position = self._underlying_cover_position
+        
         # Mark Stage 1 complete
         self._current_command = None
         self._command_in_progress = False
@@ -464,21 +469,22 @@ class TiltingCover(CoverEntity, RestoreEntity):
             self._command_in_progress = False
             return
         
-        # Update baseline for position tracking
-        self._last_stored_position = self._current_cover_position
-        self._last_stored_tilt = self._current_tilt_position
-        self._last_stored_underlying_position = self._underlying_cover_position
+        # Use current baseline (should be updated from Stage 1)
+        baseline_position = self._last_stored_position or 0
+        baseline_tilt = self._last_stored_tilt or 0
+        baseline_underlying = self._last_stored_underlying_position or 0
         
-        # Calculate required underlying movement for tilt adjustment
+        # Calculate work ratios (same as main algorithm)
         total_time = self._travel_time
         tilt_time = self._slat_rotation_time
-        tilt_work_ratio = tilt_time / total_time if total_time > 0 else 0.5
         
-        # Convert tilt difference to underlying movement
-        underlying_to_tilt_ratio = tilt_work_ratio
+        # CORRECT ratio: how much tilt per underlying movement
+        underlying_to_tilt_ratio = total_time / tilt_time if tilt_time > 0 else 1.0
+        
+        # Calculate minimal underlying movement needed for tilt adjustment
         underlying_needed = abs(tilt_diff) / underlying_to_tilt_ratio
         
-        baseline_underlying = self._last_stored_underlying_position or 0
+        # Calculate target underlying position for minimal tilt adjustment
         if tilt_diff > 0:  # Need more tilt
             target_underlying = baseline_underlying + underlying_needed
         else:  # Need less tilt
@@ -487,13 +493,31 @@ class TiltingCover(CoverEntity, RestoreEntity):
         target_underlying = max(0, min(100, target_underlying))
         
         # Command underlying entity (position tracking will calculate results)
+        self._command_in_progress = True
         await self.hass.services.async_call(
             "cover", "set_cover_position",
             {"entity_id": self._cover_entity_id, "position": target_underlying}
         )
         
-        _LOGGER.debug("%s: Stage 2 command executed - underlying target=%s%% (position tracking will calculate results)",
-                      self.entity_id, target_underlying)
+        # Wait for movement to complete (shorter timeout for tilt adjustment)
+        await asyncio.sleep(0.3)  # Small delay to let movement start
+        
+        # Wait until underlying entity stops (shorter timeout for tilt-only)
+        timeout_count = 0
+        max_timeout = tilt_time + 5  # Tilt time + safety margin
+        
+        while timeout_count < max_timeout:
+            if self._underlying_cover_state in [STATE_OPEN, STATE_CLOSED]:
+                break
+            await asyncio.sleep(0.5)
+            timeout_count += 0.5
+            
+        # Mark Stage 2 complete
+        self._current_command = None
+        self._command_in_progress = False
+        
+        _LOGGER.debug("%s: Stage 2 command completed - tilt_diff=%s%%, underlying_needed=%s%%, final_underlying=%s%%",
+                      self.entity_id, tilt_diff, underlying_needed, self._underlying_cover_position)
 
     # Movement Detection System - External movement handling
     async def _handle_movement_start_detected(self, new_state: str) -> None:
