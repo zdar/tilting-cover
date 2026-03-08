@@ -207,9 +207,14 @@ class TiltingCover(CoverEntity, RestoreEntity):
         """When entity is added to hass."""
         await super().async_added_to_hass()
         
+        _LOGGER.info("%s: Starting initialization - entity_id=%s, unique_id=%s", 
+                    self.entity_id, self.entity_id, self.unique_id)
+        
         try:
             # Initialize storage handler
             await self._storage.async_load()
+            _LOGGER.info("%s: Storage initialized - loaded=%s, has_data=%s", 
+                        self.entity_id, self._storage.is_loaded(), self._storage.has_data())
             
             # Apply inherited metadata 
             await self._apply_inherited_metadata()
@@ -228,8 +233,12 @@ class TiltingCover(CoverEntity, RestoreEntity):
                 self.hass, [self._cover_entity_id], self._handle_underlying_state_change
             )
             
-            _LOGGER.debug("%s: Initialized with position=%s%%, tilt=%s%%",
+            _LOGGER.info("%s: Initialized with position=%s%%, tilt=%s%%",
                           self.entity_id, self._current_cover_position, self._current_tilt_position)
+            
+            # TEST: Force initial save to verify storage works
+            await self._save_state_to_storage()
+            _LOGGER.info("%s: Completed initial save test", self.entity_id)
                           
         except Exception as err:
             _LOGGER.error("%s: Error during setup: %s", self.entity_id, err)
@@ -809,8 +818,12 @@ class TiltingCover(CoverEntity, RestoreEntity):
         """Save current state using proper storage abstraction."""
         try:
             if not self._storage.is_loaded():
-                _LOGGER.debug("%s: Storage not loaded, skipping save", self.entity_id)
+                _LOGGER.warning("%s: Storage not loaded, skipping save", self.entity_id)
                 return
+            
+            _LOGGER.info("%s: Attempting to save state - position=%s%%, tilt=%s%%",
+                        self.entity_id, self._current_cover_position, 
+                        self._current_tilt_position)
                 
             # Use atomic storage operation
             await self._storage.async_set_position_tilt_pair(
@@ -818,9 +831,9 @@ class TiltingCover(CoverEntity, RestoreEntity):
                 self._current_tilt_position or 0
             )
             
-            _LOGGER.debug("%s: Saved state via storage abstraction - position=%s%%, tilt=%s%%",
-                         self.entity_id, self._current_cover_position, 
-                         self._current_tilt_position)
+            _LOGGER.info("%s: Successfully saved state via storage abstraction - position=%s%%, tilt=%s%%",
+                        self.entity_id, self._current_cover_position, 
+                        self._current_tilt_position)
                          
         except Exception as err:
             _LOGGER.error("%s: Error saving state via storage abstraction: %s", self.entity_id, err)

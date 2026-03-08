@@ -30,6 +30,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             f"{STORAGE_KEY}_{entry.entry_id}",
             atomic_writes=True
         )
+        _LOGGER.info("Created storage with key: %s", f"{STORAGE_KEY}_{entry.entry_id}")
         
         # Create coordinator
         coordinator = TiltingCoverDataUpdateCoordinator(

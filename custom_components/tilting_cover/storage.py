@@ -70,8 +70,8 @@ class TiltingCoverStorage:
                 
             existing_data[self._entity_id] = self._data
             await self._store.async_save(existing_data)
-            _LOGGER.debug(
-                "Saved storage data for %s: %s", self._entity_id, self._data
+            _LOGGER.info(
+                "Successfully saved storage data for %s: %s", self._entity_id, self._data
             )
         except Exception as err:
             _LOGGER.error("Error saving storage data for %s: %s", self._entity_id, err)

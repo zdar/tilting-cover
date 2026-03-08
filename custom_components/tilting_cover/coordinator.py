@@ -64,7 +64,13 @@ class TiltingCoverDataUpdateCoordinator(DataUpdateCoordinator):
                 self._storage_handlers[entity_id] = TiltingCoverStorage(
                     self.hass, self._store, entity_id
                 )
-                _LOGGER.debug("Created storage handler for entity %s", entity_id)
+                _LOGGER.info("Created storage handler for entity %s with store key %s", 
+                           entity_id, self._store.key)
+                
+                # CRITICAL FIX: Initialize storage immediately when handler is created
+                # Since async methods can't be called from sync context, 
+                # the entity must call async_load() in its async_added_to_hass()
+                
             except Exception as err:
                 _LOGGER.error("Failed to create storage handler for %s: %s", entity_id, err)
                 raise HomeAssistantError(f"Storage handler creation failed for {entity_id}") from err
