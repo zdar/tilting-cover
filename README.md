@@ -3,11 +3,9 @@
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![GitHub License](https://img.shields.io/github/license/zdar/tilting-cover)](https://github.com/zdar/tilting-cover/blob/main/LICENSE)
 
-� **Production Ready** - Sophisticated integration with position-based algorithms and decoupled architecture.
-
 ## Purpose
 
-This integration extends basic cover entities in Home Assistant that don't support tilt control. Many basic covers only allow "open" and "close" actions, but real blind mechanics follow a sequential pattern: slats rotate first to proper orientation, then the cover moves to target position.
+This integration extends basic cover entities in Home Assistant that don't support tilt control. Many basic covers only allow "open" and "close" actions, but real blind mechanics follow a sequential pattern: slats rotate first fully, then the cover moves to target position.
 
 ## How it works
 
@@ -55,6 +53,49 @@ Integration implements sophisticated position-based algorithms:
 - **Command Queue System** - Ordered execution of user commands with external movement handling
 - **Direction Change Detection** - Intermediate stop+start sequence with position storage
 - **Persistent State Recovery** - Complete state restoration across HA restarts
+
+## Architecture & Code Quality
+
+### Design Principles
+The integration follows strict **separation of concerns** architecture:
+
+```
+┌─────────────────┐    ┌──────────────────────┐    ┌─────────────────┐
+│   cover.py      │────│  coordinator.py      │────│   storage.py    │
+│  Business Logic │    │  Data Coordination   │    │  Data Storage   │
+└─────────────────┘    └──────────────────────┘    └─────────────────┘
+```
+
+### Component Responsibilities
+
+#### **cover.py** - Business Logic Layer ✅
+- Sophisticated tilting algorithm (Independent Position Tracking System)
+- Command Queue System (Stage 1/Stage 2 operations)  
+- Movement Detection System
+- Home Assistant entity interface
+- **PROHIBITED**: Direct data store access, persistence implementation
+
+#### **storage.py** - Data Persistence Layer ✅
+- TiltingCoverStorage abstraction class
+- Atomic storage operations (`async_set_position_tilt_pair`)
+- Safe data retrieval (`get_position_tilt_pair`)
+- Storage health monitoring, error handling
+
+#### **coordinator.py** - Data Coordination Layer ✅ 
+- Storage handler factory (`get_storage_handler`)
+- Data coordination between entities
+- HA Store management
+
+### Code Quality Standards
+Following [Quality Guidelines](.github/copilot-instructions.md):
+- ✅ **PEP 8 compliance** with comprehensive type hints
+- ✅ **Proper async/await patterns** for HA compatibility
+- ✅ **Comprehensive error handling** with specific exceptions
+- ✅ **HACS compatibility** requirements maintained
+- ✅ **Security best practices** with input validation
+- ✅ **Production-ready code** reviewed for reliability
+
+> **Technical Reference**: See [ALGORITHM.md](ALGORITHM.md) for complete implementation details including algorithms, decoupled architecture, and position calculation formulas.
 
 ## Current Status
 
@@ -129,13 +170,15 @@ The integration includes robust persistent storage for maintaining state across 
 - **Per-Entity Storage** - Each cover entity has independent storage
 - **Storage Health** - Built-in storage system health monitoring
 - **Backward Compatibility** - Graceful handling of storage schema changes
+- **Proper Abstraction** - Storage operations use dedicated abstraction layer (see Architecture above)
 
 ### Benefits
 - **Seamless Restarts** - No position loss during HA restarts
 - **Reliable State** - Cover and tilt positions maintained consistently  
-- **Data Integrity** - Timestamp tracking for position data age
+- **Data Integrity** - Timestamp tracking for position data age with atomic operations
 - **Fast Recovery** - Immediate state restoration on startup
 - **Performance Optimized** - Efficient storage with minimal I/O operations
+- **Maintainable Code** - Clear separation between business logic and data persistence
 
 ---
 

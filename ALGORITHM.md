@@ -771,6 +771,27 @@ async def _execute_stage_2_command(self, command: Command):
 - **Storage failures**: Position tracking continues, storage retried on next stop event
 - **Calculation errors**: Fallback to underlying position directly
 
+### Tilt Movement Validation Safeguard
+- **Theoretical Maximum Check**: All tilt calculations are validated against theoretical maximum
+- **Maximum Calculation**: `max_underlying_for_full_tilt = 100 / underlying_to_tilt_ratio`
+- **Safety Validation**: Any calculated tilt movement > theoretical maximum triggers critical error
+- **Error Recovery**: Invalid calculations are clamped to maximum to prevent system damage
+- **Logging**: Critical errors logged with full context (ratios, times, calculations) for debugging
+
+**Implementation Example**:
+```python
+# Calculate theoretical maximum for safety validation
+max_underlying_for_full_tilt = 100 / underlying_to_tilt_ratio
+
+# Validate tilt calculation doesn't exceed physics
+if underlying_needed_for_tilt > max_underlying_for_full_tilt:
+    _LOGGER.error("CRITICAL ERROR - Tilt calculation exceeds maximum!")
+    # Clamp to maximum to prevent invalid calculations
+    underlying_needed_for_tilt = min(underlying_needed_for_tilt, max_underlying_for_full_tilt)
+```
+
+**Rationale**: This safeguard prevents algorithmic errors that could request impossible tilt movements. Since the entire theoretical range should be usable (no tolerance), any calculation exceeding the maximum indicates a bug in the algorithm logic that must be caught and corrected.
+
 ### Command Queue Errors  
 - **Underlying entity unavailable**: Commands remain queued until entity available
 - **Movement timeout**: Command marked failed, queue continues with next command
