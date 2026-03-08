@@ -101,6 +101,9 @@ class TiltingCover(CoverEntity, RestoreEntity):
         # Persistent data store
         self._data_store = coordinator.data
         
+        # Storage handler - proper abstraction layer
+        self._storage = coordinator.get_storage_handler(self.unique_id)
+        
         # Event listener cleanup
         self._unsub_state_listener = None
 
@@ -177,19 +180,45 @@ class TiltingCover(CoverEntity, RestoreEntity):
             return None
         return self._current_cover_position == 0
 
+    @property
+    def is_open(self) -> bool | None:
+        """Return if the cover is open."""
+        if self._current_cover_position is None:
+            return None
+        return self._current_cover_position == 100
+
+    @property
+    def state(self) -> str | None:
+        """Return the current state of the cover."""
+        if self._underlying_cover_state:
+            return self._underlying_cover_state
+        
+        # Fallback state based on position if underlying state unavailable
+        if self._current_cover_position is None:
+            return None
+        elif self._current_cover_position == 0:
+            return STATE_CLOSED
+        elif self._current_cover_position == 100:
+            return STATE_OPEN
+        else:
+            return STATE_OPEN  # Partially open
+
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         await super().async_added_to_hass()
         
         try:
+            # Initialize storage handler
+            await self._storage.async_load()
+            
             # Apply inherited metadata 
             await self._apply_inherited_metadata()
             
-            # Restore state
-            stored_data = await self._get_stored_data()
-            if stored_data:
-                self._current_cover_position = stored_data.get("position")
-                self._current_tilt_position = stored_data.get("tilt")
+            # Restore state from proper storage abstraction
+            if self._storage.has_data():
+                cover_pos, tilt_pos, _ = self._storage.get_position_tilt_pair()
+                self._current_cover_position = cover_pos
+                self._current_tilt_position = tilt_pos
                 
             # Sync with underlying cover
             await self._sync_with_underlying_cover()
@@ -213,8 +242,8 @@ class TiltingCover(CoverEntity, RestoreEntity):
                 self._unsub_state_listener()
                 self._unsub_state_listener = None
                 
-            # Save final state before removal
-            await self._save_current_state()
+            # Save final state using proper storage abstraction
+            await self._save_state_to_storage()
             _LOGGER.debug("%s: Cleanup completed", self.entity_id)
         except Exception as err:
             _LOGGER.warning("%s: Error during cleanup: %s", self.entity_id, err)
@@ -553,8 +582,8 @@ class TiltingCover(CoverEntity, RestoreEntity):
             self._current_cover_position = 100
             self._current_tilt_position = 100
         
-        # Save final state
-        await self._save_current_state()
+        # Save final state using proper storage abstraction
+        await self._save_state_to_storage()
         
         _LOGGER.debug("%s: External movement stopped - final state=%s, position=%s%%, tilt=%s%%",
                       self.entity_id, final_state, 
@@ -621,7 +650,7 @@ class TiltingCover(CoverEntity, RestoreEntity):
                     "%s: Synchronized to fully closed - %s%% -> 0%%, tilt %s%% -> 0%% (underlying=0%%)",
                     self.entity_id, old_position, old_tilt
                 )
-                await self._save_current_state()
+                await self._save_state_to_storage()
                 
         elif underlying_position == 100:
             # Cover is fully open - check for timing disagreement
@@ -647,7 +676,7 @@ class TiltingCover(CoverEntity, RestoreEntity):
                     "%s: Synchronized to fully open - %s%% -> 100%%, tilt %s%% -> 100%% (underlying=100%%)",
                     self.entity_id, old_position, old_tilt
                 )
-                await self._save_current_state()
+                await self._save_state_to_storage()
 
     # Cover control methods - Command Queue System
     async def async_open_cover(self, **kwargs: Any) -> None:
@@ -751,18 +780,23 @@ class TiltingCover(CoverEntity, RestoreEntity):
         
         await self._process_command_queue()
 
-    # Utility methods
-    async def _get_stored_data(self) -> dict:
-        """Get stored state data."""
-        return self._data_store.get(f"{self.entity_id}_state", {})
-
-    async def _save_current_state(self) -> None:
-        """Save current state to persistent storage."""
-        state_data = {
-            "position": self._current_cover_position,
-            "tilt": self._current_tilt_position,
-        }
-        self._data_store[f"{self.entity_id}_state"] = state_data
-        
-        # Trigger coordinator update to save data
-        await self._coordinator.async_request_refresh()
+    # Utility methods - proper storage abstraction
+    async def _save_state_to_storage(self) -> None:
+        """Save current state using proper storage abstraction."""
+        try:
+            if not self._storage.is_loaded():
+                _LOGGER.debug("%s: Storage not loaded, skipping save", self.entity_id)
+                return
+                
+            # Use atomic storage operation
+            await self._storage.async_set_position_tilt_pair(
+                self._current_cover_position or 0,
+                self._current_tilt_position or 0
+            )
+            
+            _LOGGER.debug("%s: Saved state via storage abstraction - position=%s%%, tilt=%s%%",
+                         self.entity_id, self._current_cover_position, 
+                         self._current_tilt_position)
+                         
+        except Exception as err:
+            _LOGGER.error("%s: Error saving state via storage abstraction: %s", self.entity_id, err)
