@@ -336,66 +336,68 @@ class TiltingCover(CoverEntity, RestoreEntity):
         if underlying_diff == 0:
             return {"position": baseline_position, "tilt": baseline_tilt}
         
-        # Determine movement direction and targets
-        direction = "opening" if new_underlying_position > baseline_underlying else "closing"
-        
-        # Get command targets if command is active, otherwise use natural targets
-        if self._current_command and self._command_in_progress:
-            target_position = self._current_command.get("target_position", baseline_position)
-            target_tilt = self._current_command.get("target_tilt", baseline_tilt)
+        # Determine movement direction (FIXED: based on underlying position change)
+        if new_underlying_position > baseline_underlying:
+            # Opening movement - natural tilt goes toward 100%
+            direction = "opening"
+            natural_target_tilt = 100
         else:
-            # NO ACTIVE COMMAND: Calculate natural movement based on direction
-            if direction == "opening":
-                # Natural opening: move toward 100% position and tilt
-                target_position = 100
-                target_tilt = 100
-            else:
-                # Natural closing: move toward 0% position and tilt  
-                target_position = 0
-                target_tilt = 0
+            # Closing movement - natural tilt goes toward 0%
+            direction = "closing" 
+            natural_target_tilt = 0
         
-        position_diff = abs(target_position - baseline_position)
-        tilt_diff = abs(target_tilt - baseline_tilt)
+        # ALGORITHM RULE: ALWAYS use natural targets for tilt, never command targets
+        # Calculate required tilt change
+        total_tilt_change = abs(natural_target_tilt - baseline_tilt)
         
-        # Calculate work distribution ratios based on time configuration
+        # Calculate work ratios (FIXED: correct efficiency ratios from time configuration)
         total_time = self._travel_time
         tilt_time = self._slat_rotation_time
-        travel_time = max(total_time - tilt_time, 0.1)
+        actual_travel_time = max(total_time - tilt_time, 0.1)
         
-        # Work ratios for underlying movement distribution
-        tilt_work_ratio = tilt_time / total_time if total_time > 0 else 0.5
-        travel_work_ratio = travel_time / total_time if total_time > 0 else 0.5
+        # CORRECT RATIOS: How much tilt/travel per underlying movement
+        underlying_to_tilt_ratio = total_time / tilt_time if tilt_time > 0 else 1.0
+        underlying_to_travel_ratio = total_time / actual_travel_time if actual_travel_time > 0 else 1.0
         
-        # SEQUENTIAL LOGIC: SLATS FIRST, THEN MOVEMENT (Algorithm fundamental principle)
+        # SAFETY CHECK: Validate that tilt calculation doesn't exceed theoretical maximum
+        max_underlying_for_full_tilt = 100 / underlying_to_tilt_ratio if underlying_to_tilt_ratio > 0 else 100
+        if total_tilt_change > 0:
+            underlying_needed_for_theoretical_tilt = total_tilt_change / underlying_to_tilt_ratio
+            if underlying_needed_for_theoretical_tilt > max_underlying_for_full_tilt:
+                _LOGGER.error(
+                    "%s: CRITICAL ERROR - Tilt calculation exceeds maximum! needed=%s%%, max=%s%%, tilt_change=%s%%, ratio=%s (travel_time=%ss, slat_time=%ss)",
+                    self.entity_id, underlying_needed_for_theoretical_tilt, max_underlying_for_full_tilt, 
+                    total_tilt_change, underlying_to_tilt_ratio, total_time, tilt_time
+                )
+                # Clamp to maximum to prevent invalid calculations
+                underlying_needed_for_theoretical_tilt = min(underlying_needed_for_theoretical_tilt, max_underlying_for_full_tilt)
         
-        # Phase 1: Slat rotation (happens first)
-        if tilt_diff > 0:
-            underlying_needed_for_tilt = tilt_diff / tilt_work_ratio if tilt_work_ratio > 0 else 0
+        # CORE SEQUENTIAL ALGORITHM: Tilt first, then travel
+        # CRITICAL: This enforces the fundamental blind behavior
+        if total_tilt_change > 0:
+            underlying_needed_for_tilt = total_tilt_change / underlying_to_tilt_ratio
             
             if underlying_diff <= underlying_needed_for_tilt:
-                # Still in Phase 1 - all movement goes to tilt
-                tilt_progress = underlying_diff * tilt_work_ratio
-                position_progress = 0
+                # Phase 1: ALL underlying movement converts to tilt - cover CANNOT move yet
+                tilt_progress = underlying_diff * underlying_to_tilt_ratio
+                travel_progress = 0  # Cover stays at baseline position
             else:
-                # Phase 1 complete - tilt finished, remaining goes to position
-                tilt_progress = tilt_diff  # Complete tilt change
+                # Phase 2: Tilt complete - remaining underlying converts to travel
+                tilt_progress = total_tilt_change  # Slats locked in final position
                 remaining_underlying = underlying_diff - underlying_needed_for_tilt
-                position_progress = remaining_underlying * travel_work_ratio
+                travel_progress = remaining_underlying * underlying_to_travel_ratio
         else:
-            # No tilt change - all goes to position movement
+            # No tilt change needed - all goes to travel
             tilt_progress = 0
-            position_progress = underlying_diff * travel_work_ratio
+            travel_progress = underlying_diff * underlying_to_travel_ratio
         
-        # Apply changes based on movement direction
-        direction = "opening" if target_position > baseline_position else "closing"
-        
-        # Calculate final positions
+        # Apply progress from baseline positions (FIXED: use direction from underlying)
         if direction == "opening":
-            final_position = baseline_position + min(position_progress, position_diff)
-            final_tilt = baseline_tilt + min(tilt_progress, tilt_diff)
-        else:
-            final_position = baseline_position - min(position_progress, position_diff)
-            final_tilt = baseline_tilt - min(tilt_progress, tilt_diff)
+            final_tilt = baseline_tilt + tilt_progress
+            final_position = baseline_position + travel_progress
+        else:  # closing
+            final_tilt = baseline_tilt - tilt_progress
+            final_position = baseline_position - travel_progress
         
         # Clamp to valid ranges
         final_position = max(0, min(100, final_position))
@@ -429,115 +431,65 @@ class TiltingCover(CoverEntity, RestoreEntity):
         elif stage == "stage_2":
             await self._execute_stage_2_command(self._current_command)
             
-        # Continue processing queue after command completes
-        await self._process_command_queue()
+        # NOTE: Command completion and next queue processing happens in movement stop detection
 
     async def _execute_stage_1_command(self, command: dict) -> None:
-        """Execute Stage 1 command - position movement with natural tilt."""
+        """Execute Stage 1 command - position movement with integrated tilt handling."""
         target_position = command["target_position"]
         
-        # Update baseline for position tracking before command
-        self._last_stored_position = self._current_cover_position
-        self._last_stored_tilt = self._current_tilt_position
-        self._last_stored_underlying_position = self._underlying_cover_position
-        
-        # Command underlying entity to target position
-        await self.hass.services.async_call(
-            "cover", "set_cover_position",
-            {"entity_id": self._cover_entity_id, "position": target_position}
-        )
-        
-        # Wait for movement to complete
-        await asyncio.sleep(0.5)  # Small delay to let movement start
-        
-        # Wait until underlying entity reaches target or stops
-        timeout_count = 0
-        max_timeout = self._travel_time * 2  # Safety timeout
-        
-        while timeout_count < max_timeout:
-            if self._underlying_cover_position == target_position:
-                break
-            if self._underlying_cover_state in [STATE_OPEN, STATE_CLOSED]:
-                break
-            await asyncio.sleep(1)
-            timeout_count += 1
-            
-        # Calculate final Stage 1 positions using core algorithm
-        if self._underlying_cover_position is not None:
-            position_result = await self._calculate_position_from_underlying_change(
-                self._underlying_cover_position
-            )
-            if position_result:
-                self._current_cover_position = position_result["position"]
-                self._current_tilt_position = position_result["tilt"]
-        
-        # CRITICAL: Update baseline positions for Stage 2
-        self._last_stored_position = self._current_cover_position
-        self._last_stored_tilt = self._current_tilt_position
-        self._last_stored_underlying_position = self._underlying_cover_position
-        
-        # Mark Stage 1 complete
-        self._current_command = None
-        self._command_in_progress = False
-        
-        _LOGGER.debug("%s: Stage 1 command completed - underlying reached %s%%, position tracking calculated results",
-                      self.entity_id, self._underlying_cover_position)
-
-    async def _execute_stage_2_command(self, command: dict) -> None:
-        """Execute Stage 2 command - precise tilt positioning."""
-        target_tilt = command["target_tilt"]
+        # Get current positions from independent tracking system
+        current_position = self._current_cover_position or 0
         current_tilt = self._current_tilt_position or 0
         
-        # Calculate tilt difference needed
-        tilt_diff = target_tilt - current_tilt
+        # Calculate underlying movement needed
+        position_diff = target_position - current_position
         
-        if abs(tilt_diff) < 1:  # Already at target
-            self._current_command = None
-            self._command_in_progress = False
-            return
+        # Calculate natural tilt target based on movement direction
+        if position_diff > 0:  # Opening
+            natural_target_tilt = 100
+        elif position_diff < 0:  # Closing
+            natural_target_tilt = 0
+        else:
+            natural_target_tilt = current_tilt
         
-        # Use current baseline (should be updated from Stage 1)
-        baseline_position = self._last_stored_position or 0
-        baseline_tilt = self._last_stored_tilt or 0
+        natural_tilt_diff = natural_target_tilt - current_tilt
+        
+        # Calculate required underlying movement
+        underlying_to_tilt_ratio = self._travel_time / self._slat_rotation_time if self._slat_rotation_time > 0 else 1.0
+        underlying_to_travel_ratio = self._travel_time / (max(self._travel_time - self._slat_rotation_time, 0.1))
+        
+        # SAFETY CHECK: Validate tilt movement calculation
+        max_underlying_for_full_tilt = 100 / underlying_to_tilt_ratio if underlying_to_tilt_ratio > 0 else 100
+        
+        underlying_needed_for_position = abs(position_diff)
+        underlying_needed_for_tilt = abs(natural_tilt_diff) / underlying_to_tilt_ratio if abs(natural_tilt_diff) > 0 else 0
+        
+        # SAFETY CHECK: Ensure tilt calculation doesn't exceed theoretical maximum
+        if underlying_needed_for_tilt > max_underlying_for_full_tilt:
+            _LOGGER.error(
+                "%s: STAGE 1 CRITICAL ERROR - Tilt movement exceeds maximum! needed=%s%%, max=%s%%, tilt_diff=%s%%, ratio=%s (travel_time=%ss, slat_time=%ss)",
+                self.entity_id, underlying_needed_for_tilt, max_underlying_for_full_tilt, 
+                abs(natural_tilt_diff), underlying_to_tilt_ratio, self._travel_time, self._slat_rotation_time
+            )
+            # Clamp to maximum to prevent invalid calculations
+            underlying_needed_for_tilt = min(underlying_needed_for_tilt, max_underlying_for_full_tilt)
+        total_underlying_movement = underlying_needed_for_position + underlying_needed_for_tilt
+        
+        # Calculate target underlying position
         baseline_underlying = self._last_stored_underlying_position or 0
+        if position_diff > 0:  # Opening
+            target_underlying = baseline_underlying + total_underlying_movement
+        elif position_diff < 0:  # Closing
+            target_underlying = baseline_underlying - total_underlying_movement
+        else:
+            target_underlying = baseline_underlying
         
-        # Calculate work ratios (same as main algorithm)
-        total_time = self._travel_time
-        tilt_time = self._slat_rotation_time
+        target_underlying = max(0, min(100, target_underlying))
         
-        # CORRECT ratio: how much tilt per underlying movement
-        underlying_to_tilt_ratio = total_time / tilt_time if tilt_time > 0 else 1.0
-        
-        # CRITICAL FIX: Use minimal pulse-like movement for tilt adjustment
-        # Instead of large absolute position changes, use small relative adjustments
-        min_underlying_pulse = 2.0  # Minimum 2% underlying movement
-        underlying_needed = max(abs(tilt_diff) / underlying_to_tilt_ratio, min_underlying_pulse)
-        
-        # FIXED DIRECTION LOGIC: Consider cover physics
-        # During Stage 2, we want tilt adjustment without major cover movement
-        # Use small pulse in direction that matches tilt need BUT avoid large cover displacement
-        current_underlying = self._underlying_cover_position or baseline_underlying
-        
-        if tilt_diff > 0:  # Need more tilt (open slats more)
-            # Small pulse toward higher underlying for tilt opening
-            target_underlying = current_underlying + underlying_needed
-        else:  # Need less tilt (close slats more)  
-            # Small pulse toward lower underlying for tilt closing
-            target_underlying = current_underlying - underlying_needed
-        
-        # Limit to reasonable range to avoid excessive cover movement
-        target_underlying = max(5, min(95, target_underlying))
-        
-        # Additional safety: If target would cause major cover position change, reduce it
-        position_impact = abs(target_underlying - current_underlying) * (1.0 / underlying_to_tilt_ratio)
-        if position_impact > 5:  # More than 5% cover movement
-            _LOGGER.warning("%s: Stage 2 would cause %s%% cover movement, reducing pulse",
-                           self.entity_id, position_impact)
-            underlying_needed = min(underlying_needed, 3.0)  # Limit to 3% max
-            if tilt_diff > 0:
-                target_underlying = current_underlying + underlying_needed
-            else:
-                target_underlying = current_underlying - underlying_needed
+        # Update baseline positions before command
+        self._last_stored_position = self._current_cover_position
+        self._last_stored_tilt = self._current_tilt_position
+        self._last_stored_underlying_position = self._underlying_cover_position
         
         # Command underlying entity (position tracking will calculate results)
         self._command_in_progress = True
@@ -546,47 +498,86 @@ class TiltingCover(CoverEntity, RestoreEntity):
             {"entity_id": self._cover_entity_id, "position": target_underlying}
         )
         
-        # Wait for movement to complete (shorter timeout for tilt adjustment)
-        await asyncio.sleep(0.3)  # Small delay to let movement start
+        _LOGGER.debug("%s: Stage 1 command executed: underlying target=%s%% (position tracking will calculate results)",
+                      self.entity_id, target_underlying)
+
+    async def _execute_stage_2_command(self, command: dict) -> None:
+        """Execute Stage 2 command - tilt adjustment only."""
+        target_tilt = command["target_tilt"]
         
-        # Wait until underlying entity stops (shorter timeout for tilt-only)
-        timeout_count = 0
-        max_timeout = tilt_time + 5  # Tilt time + safety margin
+        # Get current tilt from independent tracking system
+        current_tilt = self._current_tilt_position or 0
+        tilt_diff = target_tilt - current_tilt
         
-        while timeout_count < max_timeout:
-            if self._underlying_cover_state in [STATE_OPEN, STATE_CLOSED]:
-                break
-            await asyncio.sleep(0.5)
-            timeout_count += 0.5
-            
-        # Mark Stage 2 complete
-        self._current_command = None
-        self._command_in_progress = False
+        if abs(tilt_diff) <= 2:  # 2% tolerance
+            _LOGGER.debug("Stage 2 skipped: tilt already at target (%s%%)", current_tilt)
+            self._current_command = None
+            self._command_in_progress = False
+            return
         
-        _LOGGER.info("%s: Stage 2 completed - tilt_diff=%s%%, pulse=%s%%, final_underlying=%s%%, final_tilt=%s%%",
-                     self.entity_id, tilt_diff, underlying_needed, 
-                     self._underlying_cover_position, self._current_tilt_position)
+        # Calculate underlying movement needed for tilt adjustment
+        underlying_to_tilt_ratio = self._travel_time / self._slat_rotation_time if self._slat_rotation_time > 0 else 1.0
+        underlying_needed = abs(tilt_diff) / underlying_to_tilt_ratio
+        
+        # SAFETY CHECK: Validate Stage 2 tilt movement calculation
+        max_underlying_for_full_tilt = 100 / underlying_to_tilt_ratio if underlying_to_tilt_ratio > 0 else 100
+        if underlying_needed > max_underlying_for_full_tilt:
+            _LOGGER.error(
+                "%s: STAGE 2 CRITICAL ERROR - Tilt movement exceeds maximum! needed=%s%%, max=%s%%, tilt_diff=%s%%, ratio=%s (travel_time=%ss, slat_time=%ss)",
+                self.entity_id, underlying_needed, max_underlying_for_full_tilt, 
+                abs(tilt_diff), underlying_to_tilt_ratio, self._travel_time, self._slat_rotation_time
+            )
+            # Clamp to maximum to prevent invalid calculations
+            underlying_needed = min(underlying_needed, max_underlying_for_full_tilt)
+        
+        baseline_underlying = self._last_stored_underlying_position or 0
+        if tilt_diff > 0:  # Need more tilt
+            target_underlying = baseline_underlying + underlying_needed
+        else:  # Need less tilt  
+            target_underlying = baseline_underlying - underlying_needed
+        
+        target_underlying = max(0, min(100, target_underlying))
+        
+        # Command underlying entity (position tracking will calculate results)
+        self._command_in_progress = True
+        await self.hass.services.async_call(
+            "cover", "set_cover_position",
+            {"entity_id": self._cover_entity_id, "position": target_underlying}
+        )
+        
+        _LOGGER.debug("%s: Stage 2 command executed: tilt_diff=%s%%, underlying target=%s%% (position tracking will calculate results)",
+                      self.entity_id, tilt_diff, target_underlying)
 
     # Movement Detection System - External movement handling
     async def _handle_movement_start_detected(self, new_state: str) -> None:
-        """Detect external movement start - inject fake command to maintain position tracking."""
-        if self._command_in_progress:
-            # This is our own command - no action needed
+        """Handle movement start - distinguish between commanded and external movement."""
+        
+        if self._command_in_progress and self._current_command:
+            # This movement was triggered by our command - no action needed
+            # Position tracking will handle calculations automatically
+            _LOGGER.debug("%s: Commanded movement started (%s) - position tracking active", 
+                          self.entity_id, new_state)
             return
         
-        # External movement detected - inject fake command for position tracking
+        # External movement detected - clear any pending queue and inject fake command
+        if self._command_queue:
+            _LOGGER.debug("%s: External movement detected - clearing %d pending commands", 
+                          self.entity_id, len(self._command_queue))
+            self._command_queue.clear()
+        
+        # Inject fake command for external movement tracking
         direction = "opening" if new_state == STATE_OPENING else "closing"
         
-        # Determine fake target based on direction
+        # Determine fake target based on direction  
         fake_target_position = 100 if direction == "opening" else 0
         fake_target_tilt = 100 if direction == "opening" else 0
         
-        # Inject fake command to enable position tracking
+        # Create fake command to enable position tracking
         fake_command = {
             "type": "external_movement",
             "target_position": fake_target_position,
             "target_tilt": fake_target_tilt,
-            "stage": "stage_1",
+            "stage": "external",
             "is_fake": True
         }
         
@@ -603,9 +594,7 @@ class TiltingCover(CoverEntity, RestoreEntity):
                       self.entity_id, direction)
         
     async def _handle_movement_stop_detected(self, final_state: str) -> None:
-        """Detect external movement stop - update final positions using core algorithm."""
-        if not self._current_command or not self._command_in_progress:
-            return
+        """Handle movement stop - update positions and process command completion."""
         
         # Calculate final position using core position algorithm
         if self._underlying_cover_position is not None:
@@ -616,9 +605,8 @@ class TiltingCover(CoverEntity, RestoreEntity):
                 self._current_cover_position = position_result["position"]
                 self._current_tilt_position = position_result["tilt"]
         
-        # Clear fake command
-        self._current_command = None
-        self._command_in_progress = False
+        # Check if this was a commanded movement or external movement
+        was_commanded = self._current_command and self._command_in_progress
         
         # Handle definitive positions synchronization with disagreement detection
         if final_state == STATE_CLOSED:
@@ -654,12 +642,33 @@ class TiltingCover(CoverEntity, RestoreEntity):
             self._current_cover_position = 100
             self._current_tilt_position = 100
         
+        # Update baseline positions for next operations
+        self._last_stored_position = self._current_cover_position
+        self._last_stored_tilt = self._current_tilt_position
+        self._last_stored_underlying_position = self._underlying_cover_position
+        
         # Save final state using proper storage abstraction
         await self._save_state_to_storage()
         
-        _LOGGER.debug("%s: External movement stopped - final state=%s, position=%s%%, tilt=%s%%",
-                      self.entity_id, final_state, 
-                      self._current_cover_position, self._current_tilt_position)
+        # Handle command completion and queue processing
+        if was_commanded:
+            _LOGGER.debug("%s: Command completed - final position=%s%%, tilt=%s%%",
+                          self.entity_id, self._current_cover_position, self._current_tilt_position)
+            
+            # Mark current command complete
+            self._current_command = None
+            self._command_in_progress = False
+            
+            # Process next command in queue if any
+            await self._process_command_queue()
+        else:
+            _LOGGER.debug("%s: External movement stopped - final state=%s, position=%s%%, tilt=%s%%",
+                          self.entity_id, final_state, 
+                          self._current_cover_position, self._current_tilt_position)
+            
+            # Clear any fake command from external movement
+            self._current_command = None
+            self._command_in_progress = False
 
     async def _sync_with_underlying_cover(self) -> None:
         """Sync state with underlying cover on startup."""
