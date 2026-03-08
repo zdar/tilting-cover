@@ -278,6 +278,7 @@ class TiltingCover(CoverEntity, RestoreEntity):
             _LOGGER.warning("%s: Failed to apply inherited metadata: %s", self.entity_id, err)
             # Don't raise - this is not critical for functionality
 
+    @callback
     def _handle_underlying_state_change(self, event) -> None:
         """Handle underlying cover state change."""
         new_state = event.data.get("new_state")
