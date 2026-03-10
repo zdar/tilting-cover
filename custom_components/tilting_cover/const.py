@@ -10,7 +10,7 @@ CONF_TRAVEL_TIME = "travel_time"
 CONF_SLAT_ROTATION_TIME = "slat_rotation_time"
 
 # Default values  
-DEFAULT_TRAVEL_TIME = 20  # seconds for full 0%->100% or 100%->0% travel (matches ALGORITHM.md example)
+DEFAULT_TRAVEL_TIME = 20  # seconds for full 0%->100% or 100%->0% travel (matches technical documentation example)
 DEFAULT_SLAT_ROTATION_TIME = 3  # seconds for slat rotation during movement
 
 # Tilt constants (HA tilt positions are 0-100%)

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <defs>
+    <style>
+      .slat { fill: currentColor; opacity: 0.87; }
+      .frame { fill: none; stroke: currentColor; stroke-width: 1; opacity: 0.54; }
+      .cord { fill: none; stroke: currentColor; stroke-width: 0.5; opacity: 0.54; }
+    </style>
+  </defs>
+  
+  <!-- Window frame -->
+  <rect x="2" y="2" width="20" height="20" rx="1" class="frame"/>
+  
+  <!-- Tilt cord -->
+  <line x1="20" y1="4" x2="20" y2="20" class="cord"/>
+  
+  <!-- Tilted slats showing venetian blind with tilt control -->
+  <ellipse cx="12" cy="5.5" rx="8.5" ry="0.6" class="slat" transform="rotate(15 12 5.5)"/>
+  <ellipse cx="12" cy="7.5" rx="8.5" ry="0.6" class="slat" transform="rotate(15 12 7.5)"/>
+  <ellipse cx="12" cy="9.5" rx="8.5" ry="0.6" class="slat" transform="rotate(15 12 9.5)"/>
+  <ellipse cx="12" cy="11.5" rx="8.5" ry="0.6" class="slat" transform="rotate(15 12 11.5)"/>
+  <ellipse cx="12" cy="13.5" rx="8.5" ry="0.6" class="slat" transform="rotate(15 12 13.5)"/>
+  <ellipse cx="12" cy="15.5" rx="8.5" ry="0.6" class="slat" transform="rotate(15 12 15.5)"/>
+  <ellipse cx="12" cy="17.5" rx="8.5" ry="0.6" class="slat" transform="rotate(15 12 17.5)"/>
+  <ellipse cx="12" cy="19.5" rx="8.5" ry="0.6" class="slat" transform="rotate(15 12 19.5)"/>
+  
+  <!-- Control mechanism indicators -->
+  <circle cx="19.5" cy="6" r="0.3" fill="currentColor" opacity="0.54"/>
+  <circle cx="19.5" cy="18" r="0.3" fill="currentColor" opacity="0.54"/>
+</svg>
